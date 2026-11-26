@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reports & Analytics · BLOODCARE Admin</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-portal="admin" data-page-title="System Reports & Analytics">
+  <div id="pageContent">
+    <div id="reportsLoader" class="state-box">
+      <div class="spinner"></div>
+      Generating system reports and aggregated analytics...
+    </div>
+
+    <div id="reportsContent" style="display:none;">
+      <!-- Report Header -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h3 style="margin:0; font-size:18px;">Executive Analytics & Operational Reports</h3>
+          <p style="margin:4px 0 0; font-size:13px; color:var(--text-muted);">
+            Real-time breakdown of blood reserves, donor demographics, and institutional request fulfillment.
+          </p>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="window.print()">🖨️ Print / Save PDF</button>
+      </div>
+
+      <!-- High-Level Stock Summary -->
+      <div class="stats-grid">
+        <div class="stat-card stat-green">
+          <div class="stat-info">
+            <span class="stat-label">Valid Blood Units</span>
+            <span class="stat-value" id="repValidUnits">0</span>
+            <span class="stat-subtext">Clinically usable</span>
+          </div>
+          <div class="stat-icon-wrap">✓</div>
+        </div>
+
+        <div class="stat-card stat-yellow">
+          <div class="stat-info">
+            <span class="stat-label">Expired Units</span>
+            <span class="stat-value" id="repExpiredUnits">0</span>
+            <span class="stat-subtext">Units past shelf life</span>
+          </div>
+          <div class="stat-icon-wrap">⚠️</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-info">
+            <span class="stat-label">Total Stock Batches</span>
+            <span class="stat-value" id="repTotalBatches">0</span>
+            <span class="stat-subtext">Active batch entries</span>
+          </div>
+          <div class="stat-icon-wrap">📦</div>
+        </div>
+
+        <div class="stat-card stat-blue">
+          <div class="stat-info">
+            <span class="stat-label">Requisitions Handled</span>
+            <span class="stat-value" id="repTotalReqs">0</span>
+            <span class="stat-subtext">Total request volume</span>
+          </div>
+          <div class="stat-icon-wrap">📋</div>
+        </div>
+      </div>
+
+      <!-- Donors and Inventory Breakdown Charts -->
+      <div class="grid-2">
+        <!-- Donors by Blood Group -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Donors by Blood Group</h3>
+            <span class="badge badge-info" id="donorCountTotalBadge">Donors</span>
+          </div>
+          <div id="donorsReportChart" class="chart-bar-list"></div>
+        </div>
+
+        <!-- Inventory Units by Blood Group -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Inventory Reserves by Blood Group</h3>
+            <span class="badge badge-success">Valid Units</span>
+          </div>
+          <div id="inventoryReportChart" class="chart-bar-list"></div>
+        </div>
+      </div>
+
+      <!-- Request Statistics & Hospital Distribution -->
+      <div class="grid-2">
+        <!-- Request Status Breakdown Table -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Request Status Breakdown</h3>
+          </div>
+          <div id="requestStatsTableBox"></div>
+        </div>
+
+        <!-- Hospital Inventory Table -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Hospital-Wise Blood Stock Distribution</h3>
+          </div>
+          <div id="hospitalInventoryTableBox"></div>
+        </div>
+      </div>
+
+      <!-- Expired Batches Audit Table -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Expired Blood Stock Audit</h3>
+          <span class="badge badge-danger">Immediate Action Required</span>
+        </div>
+        <div id="expiredStockTableBox"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    async function loadReports() {
+      try {
+        const [
+          totalStockRes,
+          donorsGroupRes,
+          inventoryGroupRes,
+          reqStatsRes,
+          hospInvRes,
+          expiredRes
+        ] = await Promise.all([
+          api.get('/reports/total-stock'),
+          api.get('/reports/donors-by-blood-group'),
+          api.get('/reports/inventory-by-blood-group'),
+          api.get('/reports/request-statistics'),
+          api.get('/reports/hospital-inventory'),
+          api.get('/reports/expired-stock')
+        ]);
+
+        const totalStock = totalStockRes.data || {};
+        const donorsByGroup = donorsGroupRes.data || [];
+        const invByGroup = inventoryGroupRes.data || [];
+        const reqStats = reqStatsRes.data || {};
+        const hospInv = hospInvRes.data || [];
+        const expired = expiredRes.data || [];
+
+        // Stats summary
+        document.getElementById('repValidUnits').textContent = totalStock.valid_units || 0;
+        document.getElementById('repExpiredUnits').textContent = totalStock.expired_units || 0;
+        document.getElementById('repTotalBatches').textContent = totalStock.total_batches || 0;
+        document.getElementById('repTotalReqs').textContent = reqStats.total_requests || 0;
+
+        // Donors Chart
+        const totalDonors = donorsByGroup.reduce((a, b) => a + (b.total_donors || 0), 0);
+        document.getElementById('donorCountTotalBadge').textContent = `${totalDonors} Total Donors`;
+        const maxDonors = Math.max(1, ...donorsByGroup.map(d => d.total_donors || 0));
+
+        document.getElementById('donorsReportChart').innerHTML = donorsByGroup.map(d => {
+          const pct = Math.min(100, Math.round(((d.total_donors || 0) / maxDonors) * 100));
+          return `
+            <div class="chart-bar-item">
+              <div class="chart-bar-header">
+                <span>Blood Group <b>${esc(d.blood_group)}</b></span>
+                <span><b>${d.total_donors}</b> donor(s)</span>
+              </div>
+              <div class="chart-bar-track">
+                <div class="chart-bar-fill fill-blue" style="width: ${pct}%"></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Inventory Chart
+        const maxInv = Math.max(1, ...invByGroup.map(i => i.units_available || 0));
+        document.getElementById('inventoryReportChart').innerHTML = invByGroup.map(i => {
+          const pct = Math.min(100, Math.round(((i.units_available || 0) / maxInv) * 100));
+          return `
+            <div class="chart-bar-item">
+              <div class="chart-bar-header">
+                <span>Blood Group <b>${esc(i.blood_group)}</b></span>
+                <span><b>${i.units_available}</b> valid units</span>
+              </div>
+              <div class="chart-bar-track">
+                <div class="chart-bar-fill fill-green" style="width: ${pct}%"></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Request Statistics Table
+        const statuses = reqStats.by_status || [];
+        document.getElementById('requestStatsTableBox').innerHTML = `
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Requisitions</th>
+                  <th>Total Units Requested</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${statuses.map(s => `
+                  <tr>
+                    <td>${badge(s.status)}</td>
+                    <td><b>${s.total_requests}</b> request(s)</td>
+                    <td><b>${s.total_units}</b> unit(s)</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+
+        // Hospital Inventory Table
+        document.getElementById('hospitalInventoryTableBox').innerHTML = `
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Hospital</th>
+                  <th>Location</th>
+                  <th>Valid Units in Stock</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${hospInv.map(h => `
+                  <tr>
+                    <td><b>${esc(h.hospital_name)}</b></td>
+                    <td>📍 ${esc(h.location || '—')}</td>
+                    <td><b>${h.total_units}</b> unit(s)</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+
+        // Expired Stock Audit Table
+        const expiredBox = document.getElementById('expiredStockTableBox');
+        if (!expired.length) {
+          expiredBox.innerHTML = '<div class="state-box" style="padding:20px; color:var(--success);">✓ Excellent: No expired blood stock batches currently in the database.</div>';
+        } else {
+          expiredBox.innerHTML = `
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Batch ID</th>
+                    <th>Blood Group</th>
+                    <th>Hospital</th>
+                    <th>Units</th>
+                    <th>Expiry Date</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${expired.map(e => `
+                    <tr class="row-expired">
+                      <td>#${e.stock_id}</td>
+                      <td>${badge(e.blood_group, 'red')}</td>
+                      <td><b>${esc(e.hospital_name || 'Hospital #' + e.hospital_id)}</b></td>
+                      <td><b style="color:var(--danger)">${e.units_available}</b> expired units</td>
+                      <td>${fmtDate(e.expiry_date)}</td>
+                      <td>
+                        <button class="btn btn-danger btn-sm" onclick="discardBatch(${e.stock_id})">Discard</button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+
+        document.getElementById('reportsLoader').style.display = 'none';
+        document.getElementById('reportsContent').style.display = 'block';
+      } catch (err) {
+        document.getElementById('reportsLoader').innerHTML = `<div style="color:var(--danger)">${esc(err.message)}</div>`;
+      }
+    }
+
+    window.discardBatch = async (stockId) => {
+      if (confirm(`Remove and discard expired batch #${stockId}?`)) {
+        try {
+          await api.del(`/blood-stock/${stockId}`);
+          toast(`Expired batch #${stockId} removed`, 'success');
+          loadReports();
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', loadReports);
+  </script>
+</body>
+</html>

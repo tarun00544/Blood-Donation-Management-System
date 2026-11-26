@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hospital Management · BLOODCARE Admin</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-portal="admin" data-page-title="Hospital Management">
+  <div id="pageContent">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">🏥 Hospital Blood Banks Registry</h3>
+          <p style="margin:4px 0 0; font-size:13px; color:var(--text-muted);">
+            Manage partner healthcare facilities, blood banks, and coordination contacts.
+          </p>
+        </div>
+        <button id="addHospitalBtn" class="btn btn-primary btn-sm">+ Add New Hospital</button>
+      </div>
+
+      <!-- Search Bar -->
+      <div style="margin-bottom:18px;">
+        <input type="text" id="searchInput" class="form-control" placeholder="Search hospitals by name, city or contact person...">
+      </div>
+
+      <!-- Table Container -->
+      <div id="hospitalTableBox">
+        <div class="state-box"><div class="spinner"></div>Loading hospital records...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    let hospitalsList = [];
+
+    async function loadHospitals() {
+      const box = document.getElementById('hospitalTableBox');
+      box.innerHTML = '<div class="state-box"><div class="spinner"></div>Loading hospitals...</div>';
+
+      try {
+        const q = document.getElementById('searchInput').value.trim();
+        const res = await api.get(q ? `/hospitals?search=${encodeURIComponent(q)}` : '/hospitals');
+        hospitalsList = res.data || [];
+        renderHospitals();
+      } catch (err) {
+        box.innerHTML = `<div class="state-box" style="color:var(--danger)">${esc(err.message)}</div>`;
+      }
+    }
+
+    function renderHospitals() {
+      const box = document.getElementById('hospitalTableBox');
+      if (!hospitalsList.length) {
+        box.innerHTML = '<div class="state-box">No hospitals found. Click "+ Add New Hospital" to register one.</div>';
+        return;
+      }
+
+      box.innerHTML = `
+        <div style="font-size:13px; color:var(--text-muted); margin-bottom:10px;">
+          Showing <b>${hospitalsList.length}</b> participating hospital(s):
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Hospital Name</th>
+                <th>Location / City</th>
+                <th>Contact Person</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${hospitalsList.map(h => `
+                <tr>
+                  <td>#${h.hospital_id}</td>
+                  <td><b>${esc(h.name)}</b></td>
+                  <td>📍 ${esc(h.location || '—')}</td>
+                  <td>👤 ${esc(h.contact_person || '—')}</td>
+                  <td>
+                    <button class="btn btn-outline btn-sm" onclick="editHospital(${h.hospital_id})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteHospital(${h.hospital_id}, '${esc(h.name)}')">Delete</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function openHospitalModal(hosp = null) {
+      const isEdit = hosp !== null;
+      const html = `
+        <form id="modalHospForm" novalidate>
+          <div class="form-group">
+            <label class="form-label">Hospital Name <span class="required">*</span></label>
+            <input type="text" id="hName" class="form-control" value="${esc(hosp ? hosp.name : '')}" placeholder="e.g. Apollo Life Hospital" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">City / Location</label>
+            <input type="text" id="hLocation" class="form-control" value="${esc(hosp ? hosp.location : '')}" placeholder="e.g. Ludhiana, Punjab">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Key Contact Person / Coordinator</label>
+            <input type="text" id="hContact" class="form-control" value="${esc(hosp ? hosp.contact_person : '')}" placeholder="e.g. Dr. Rajesh Kumar">
+          </div>
+          <div class="modal-footer" style="margin:-24px -24px -24px -24px; margin-top:20px;">
+            <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+            <button type="submit" id="saveHBtn" class="btn btn-primary">${isEdit ? 'Update Hospital' : 'Save Hospital'}</button>
+          </div>
+        </form>
+      `;
+
+      const modal = openModal(isEdit ? `Edit Hospital #${hosp.hospital_id}` : 'Add New Hospital', html);
+      const form = modal.querySelector('#modalHospForm');
+
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const name = modal.querySelector('#hName').value.trim();
+        const location = modal.querySelector('#hLocation').value.trim() || null;
+        const contact_person = modal.querySelector('#hContact').value.trim() || null;
+
+        if (!name) {
+          toast('Hospital name is required', 'error');
+          return;
+        }
+
+        const btn = modal.querySelector('#saveHBtn');
+        btn.disabled = true;
+
+        try {
+          const payload = { name, location, contact_person };
+          if (isEdit) {
+            await api.put(`/hospitals/${hosp.hospital_id}`, payload);
+            toast('Hospital updated successfully', 'success');
+          } else {
+            await api.post('/hospitals', payload);
+            toast('Hospital added successfully', 'success');
+          }
+          modal.remove();
+          loadHospitals();
+        } catch (err) {
+          toast(err.message, 'error');
+          btn.disabled = false;
+        }
+      };
+    }
+
+    window.editHospital = (id) => {
+      const h = hospitalsList.find(x => x.hospital_id === id);
+      if (h) openHospitalModal(h);
+    };
+
+    window.deleteHospital = (id, name) => {
+      const modal = openModal(`Delete Hospital #${id}`, `
+        <p>Are you sure you want to delete hospital <b>${esc(name)}</b>?</p>
+        <div class="alert-banner alert-warning" style="margin:12px 0;">
+          <span class="alert-icon">⚠️</span>
+          <div class="alert-content" style="font-size:12px;">
+            Deleting this hospital will automatically remove its associated blood stock batches and blood requests per database integrity rules.
+          </div>
+        </div>
+        <div class="modal-footer" style="margin:-24px -24px -24px -24px; margin-top:20px;">
+          <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+          <button type="button" id="confirmHDelBtn" class="btn btn-danger">Confirm Delete</button>
+        </div>
+      `);
+      modal.querySelector('#confirmHDelBtn').onclick = async () => {
+        try {
+          await api.del(`/hospitals/${id}`);
+          toast('Hospital deleted successfully', 'success');
+          modal.remove();
+          loadHospitals();
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      };
+    };
+
+    document.getElementById('addHospitalBtn').onclick = () => openHospitalModal();
+    document.getElementById('searchInput').oninput = () => {
+      clearTimeout(window._searchTimer);
+      window._searchTimer = setTimeout(loadHospitals, 300);
+    };
+
+    document.addEventListener('DOMContentLoaded', loadHospitals);
+  </script>
+</body>
+</html>

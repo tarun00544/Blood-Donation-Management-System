@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Blood Requests · BLOODCARE</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-portal="user" data-page-title="My Blood Requests">
+  <div id="pageContent">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">📋 My Personal Blood Requests</h3>
+          <p style="margin:4px 0 0; font-size:13px; color:var(--text-muted);">
+            Real-time tracking of blood requisitions submitted under your account.
+          </p>
+        </div>
+        <a href="request-blood.html" class="btn btn-primary btn-sm">+ New Blood Request</a>
+      </div>
+
+      <!-- Filters & Toolbar -->
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:18px;">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <label style="font-size:13px; font-weight:600; color:var(--text-secondary); margin:0;">Status Filter:</label>
+          <select id="filterStatus" class="form-control" style="width:160px; padding:6px 12px; height:36px;">
+            <option value="">All Statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
+            <option value="Fulfilled">Fulfilled</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </div>
+        <button id="refreshBtn" class="btn btn-outline btn-sm">🔄 Refresh List</button>
+      </div>
+
+      <div id="requestsTableBox">
+        <div class="state-box"><div class="spinner"></div>Loading your requests...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    let myRequests = [];
+
+    async function loadRequests() {
+      const box = document.getElementById('requestsTableBox');
+      box.innerHTML = '<div class="state-box"><div class="spinner"></div>Loading your requests...</div>';
+
+      try {
+        const res = await api.get('/user/blood-requests');
+        myRequests = res.data || [];
+        renderTable();
+      } catch (err) {
+        box.innerHTML = `<div class="state-box" style="color:var(--danger)">${esc(err.message)}</div>`;
+      }
+    }
+
+    function renderTable() {
+      const statusFilter = document.getElementById('filterStatus').value;
+      const box = document.getElementById('requestsTableBox');
+
+      const filtered = myRequests.filter(r => !statusFilter || r.status === statusFilter);
+
+      if (!filtered.length) {
+        box.innerHTML = `
+          <div class="state-box">
+            <p>No blood requests found ${statusFilter ? `with status "${statusFilter}"` : 'yet'}.</p>
+            <a href="request-blood.html" class="btn btn-primary btn-sm">+ Submit a Request</a>
+          </div>
+        `;
+        return;
+      }
+
+      box.innerHTML = `
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Request ID</th>
+                <th>Blood Group</th>
+                <th>Units Required</th>
+                <th>Hospital</th>
+                <th>Patient Name</th>
+                <th>Required Date</th>
+                <th>Request Date</th>
+                <th>Current Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.map(r => `
+                <tr>
+                  <td><b>#${r.request_id}</b></td>
+                  <td>${badge(r.blood_group, 'red')}</td>
+                  <td><b>${r.units_required}</b> unit(s)</td>
+                  <td>${esc(r.hospital_name || 'Hospital #' + r.hospital_id)}</td>
+                  <td>${esc(r.recipient_name || '—')}</td>
+                  <td>${fmtDate(r.required_date)}</td>
+                  <td>${fmtDateTime(r.request_date)}</td>
+                  <td>${badge(r.status)}</td>
+                  <td>
+                    <button class="btn btn-outline btn-sm" onclick="viewDetails(${r.request_id})">
+                      Details
+                    </button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    window.viewDetails = function(requestId) {
+      const r = myRequests.find(x => x.request_id === requestId);
+      if (!r) return;
+
+      const html = `
+        <div class="detail-list">
+          <div class="detail-label">Request ID</div>
+          <div class="detail-value">#${r.request_id}</div>
+
+          <div class="detail-label">Status</div>
+          <div class="detail-value">${badge(r.status)}</div>
+
+          <div class="detail-label">Blood Group</div>
+          <div class="detail-value">${badge(r.blood_group, 'red')}</div>
+
+          <div class="detail-label">Units Required</div>
+          <div class="detail-value"><b>${r.units_required}</b> unit(s)</div>
+
+          <div class="detail-label">Hospital</div>
+          <div class="detail-value">${esc(r.hospital_name || 'Hospital')} (${esc(r.hospital_location || '')})</div>
+
+          <div class="detail-label">Patient Name</div>
+          <div class="detail-value">${esc(r.recipient_name || '—')}</div>
+
+          <div class="detail-label">Required Date</div>
+          <div class="detail-value">${fmtDate(r.required_date)}</div>
+
+          <div class="detail-label">Submission Date</div>
+          <div class="detail-value">${fmtDateTime(r.request_date)}</div>
+
+          <div class="detail-label">Clinical Notes</div>
+          <div class="detail-value" style="white-space:pre-wrap;">${esc(r.notes || 'No specific clinical notes provided.')}</div>
+        </div>
+      `;
+      openModal(`Blood Request #${r.request_id} Details`, html);
+    };
+
+    document.getElementById('filterStatus').onchange = renderTable;
+    document.getElementById('refreshBtn').onclick = loadRequests;
+
+    document.addEventListener('DOMContentLoaded', loadRequests);
+  </script>
+</body>
+</html>

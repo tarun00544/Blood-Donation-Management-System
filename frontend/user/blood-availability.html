@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blood Availability · BLOODCARE</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-portal="user" data-page-title="Blood Availability">
+  <div id="pageContent">
+    <!-- Blood Group Overview Cards -->
+    <h3 style="margin-bottom: 14px; font-size: 16px;">Live Blood Bank Stock (All Valid Units)</h3>
+    <div id="stockSummaryGrid" class="grid-4">
+      <div class="state-box" style="grid-column: 1 / -1;"><div class="spinner"></div>Loading stock overview...</div>
+    </div>
+
+    <!-- Hospital-wise Blood Stock Table -->
+    <div class="card" style="margin-top: 24px;">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Hospital Blood Bank Inventory</h3>
+          <p style="margin:4px 0 0; font-size:13px; color:var(--text-muted);">
+            Check verified blood batches and expiration dates by hospital.
+          </p>
+        </div>
+        <a href="request-blood.html" class="btn btn-primary btn-sm">+ Request Blood</a>
+      </div>
+
+      <!-- Filters -->
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
+        <div style="flex:1; min-width:160px;">
+          <select id="filterGroup" class="form-control">
+            <option value="">All Blood Groups</option>
+            <option value="A+">A+</option>
+            <option value="A-">A-</option>
+            <option value="B+">B+</option>
+            <option value="B-">B-</option>
+            <option value="AB+">AB+</option>
+            <option value="AB-">AB-</option>
+            <option value="O+">O+</option>
+            <option value="O-">O-</option>
+          </select>
+        </div>
+
+        <div style="flex:2; min-width:200px;">
+          <select id="filterHospital" class="form-control">
+            <option value="">All Participating Hospitals</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="stockTableBox">
+        <div class="state-box"><div class="spinner"></div>Loading hospital inventory...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    let allStock = [];
+    let hospitals = [];
+
+    async function loadStockData() {
+      try {
+        const [stockRes, hospRes] = await Promise.all([
+          api.get('/blood-stock'),
+          api.get('/hospitals')
+        ]);
+        allStock = stockRes.data || [];
+        hospitals = hospRes.data || [];
+
+        // Populate hospital filter dropdown
+        const hospSelect = document.getElementById('filterHospital');
+        hospSelect.innerHTML = '<option value="">All Participating Hospitals</option>' +
+          hospitals.map(h => `<option value="${h.hospital_id}">${esc(h.name)} (${esc(h.location || '')})</option>`).join('');
+
+        renderSummary();
+        renderTable();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    function renderSummary() {
+      const groups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+      const totals = {};
+      groups.forEach(g => totals[g] = 0);
+
+      allStock.forEach(s => {
+        if (s.expiry_status !== 'Expired') {
+          totals[s.blood_group] = (totals[s.blood_group] || 0) + Number(s.units_available || 0);
+        }
+      });
+
+      const grid = document.getElementById('stockSummaryGrid');
+      grid.innerHTML = groups.map(g => `
+        <div class="blood-group-card ${totals[g] < 10 ? 'low-stock' : ''}">
+          ${totals[g] < 10 ? '<span class="low-pill">Low Stock</span>' : ''}
+          <div class="blood-group-badge">${esc(g)}</div>
+          <div class="blood-group-units">${totals[g]}</div>
+          <div class="blood-group-label">Valid Units Available</div>
+        </div>
+      `).join('');
+    }
+
+    function renderTable() {
+      const groupFilter = document.getElementById('filterGroup').value;
+      const hospFilter = document.getElementById('filterHospital').value;
+
+      const filtered = allStock.filter(s => {
+        if (groupFilter && s.blood_group !== groupFilter) return false;
+        if (hospFilter && String(s.hospital_id) !== hospFilter) return false;
+        return true;
+      });
+
+      const box = document.getElementById('stockTableBox');
+      if (!filtered.length) {
+        box.innerHTML = '<div class="state-box">No blood stock entries found matching the filter.</div>';
+        return;
+      }
+
+      box.innerHTML = `
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Batch #</th>
+                <th>Blood Group</th>
+                <th>Hospital</th>
+                <th>Units Available</th>
+                <th>Expiry Date</th>
+                <th>Batch Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.map(s => `
+                <tr style="${s.expiry_status === 'Expired' ? 'opacity:0.6; background:#f8fafc;' : ''}">
+                  <td>#${s.stock_id}</td>
+                  <td>${badge(s.blood_group, 'red')}</td>
+                  <td><b>${esc(s.hospital_name || 'Hospital #' + s.hospital_id)}</b></td>
+                  <td><b>${s.units_available}</b> unit(s)</td>
+                  <td>${fmtDate(s.expiry_date)}</td>
+                  <td>${badge(s.expiry_status)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    document.getElementById('filterGroup').onchange = renderTable;
+    document.getElementById('filterHospital').onchange = renderTable;
+
+    document.addEventListener('DOMContentLoaded', loadStockData);
+  </script>
+</body>
+</html>

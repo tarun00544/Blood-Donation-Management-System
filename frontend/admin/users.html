@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management · BLOODCARE Admin</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-portal="admin" data-page-title="User Management">
+  <div id="pageContent">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">🛡️ Registered System Users & Role Administration</h3>
+          <p style="margin:4px 0 0; font-size:13px; color:var(--text-muted);">
+            Audit registered accounts, check donor participation, and control access permissions.
+          </p>
+        </div>
+        <button id="refreshUsersBtn" class="btn btn-outline btn-sm">🔄 Refresh Users</button>
+      </div>
+
+      <!-- Search & Filter -->
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
+        <div style="flex:2; min-width:200px;">
+          <input type="text" id="searchInput" class="form-control" placeholder="Search by name, email, phone...">
+        </div>
+        <div style="flex:1; min-width:140px;">
+          <select id="roleFilter" class="form-control">
+            <option value="">All Roles</option>
+            <option value="user">User (Donor/Recipient)</option>
+            <option value="admin">Administrator</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:140px;">
+          <select id="statusFilter" class="form-control">
+            <option value="">All Statuses</option>
+            <option value="active">Active Accounts</option>
+            <option value="inactive">Deactivated</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="usersTableBox">
+        <div class="state-box"><div class="spinner"></div>Loading registered users...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    let usersList = [];
+
+    async function loadUsers() {
+      const box = document.getElementById('usersTableBox');
+      box.innerHTML = '<div class="state-box"><div class="spinner"></div>Loading users...</div>';
+
+      try {
+        const res = await api.get('/admin/users');
+        usersList = res.data || [];
+        renderUsers();
+      } catch (err) {
+        box.innerHTML = `<div class="state-box" style="color:var(--danger)">${esc(err.message)}</div>`;
+      }
+    }
+
+    function renderUsers() {
+      const box = document.getElementById('usersTableBox');
+      const search = document.getElementById('searchInput').value.trim().toLowerCase();
+      const role = document.getElementById('roleFilter').value;
+      const status = document.getElementById('statusFilter').value;
+
+      const filtered = usersList.filter(u => {
+        if (search && !(`${u.name} ${u.email} ${u.phone || ''}`).toLowerCase().includes(search)) return false;
+        if (role && u.role !== role) return false;
+        if (status === 'active' && !u.is_active) return false;
+        if (status === 'inactive' && u.is_active) return false;
+        return true;
+      });
+
+      if (!filtered.length) {
+        box.innerHTML = '<div class="state-box">No users found matching the filter criteria.</div>';
+        return;
+      }
+
+      box.innerHTML = `
+        <div style="font-size:13px; color:var(--text-muted); margin-bottom:10px;">
+          Showing <b>${filtered.length}</b> registered user account(s):
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>User ID</th>
+                <th>Full Name</th>
+                <th>Email Address</th>
+                <th>Phone</th>
+                <th>Role</th>
+                <th>Donor Profile</th>
+                <th>Requests</th>
+                <th>Account Status</th>
+                <th>Registered On</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.map(u => `
+                <tr>
+                  <td>#${u.user_id}</td>
+                  <td><b>${esc(u.name)}</b></td>
+                  <td>${esc(u.email)}</td>
+                  <td>${esc(u.phone || '—')}</td>
+                  <td>${badge(u.role, u.role === 'admin' ? 'red' : 'info')}</td>
+                  <td>
+                    ${u.donor_id ? `<span class="badge badge-success">✓ Donor (${esc(u.donor_blood_group || '—')})</span>` : '<span style="color:var(--text-muted); font-size:12px;">Not Donor</span>'}
+                  </td>
+                  <td><b>${u.request_count || 0}</b> request(s)</td>
+                  <td>
+                    ${u.is_active ? badge('Active', 'success') : badge('Deactivated', 'danger')}
+                  </td>
+                  <td>${fmtDate(u.created_at)}</td>
+                  <td>
+                    ${u.role !== 'admin' ? `
+                      <button class="btn btn-sm ${u.is_active ? 'btn-outline' : 'btn-success'}" onclick="toggleUserStatus(${u.user_id}, ${!u.is_active})">
+                        ${u.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                    ` : '<span style="color:var(--text-muted); font-size:12px;">Admin</span>'}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    window.toggleUserStatus = async (userId, newStatus) => {
+      const actionName = newStatus ? 'activate' : 'deactivate';
+      if (confirm(`Are you sure you want to ${actionName} User #${userId}?`)) {
+        try {
+          await api.put(`/admin/users/${userId}/status`, { is_active: newStatus });
+          toast(`User account successfully ${actionName}d`, 'success');
+          loadUsers();
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      }
+    };
+
+    document.getElementById('searchInput').oninput = renderUsers;
+    document.getElementById('roleFilter').onchange = renderUsers;
+    document.getElementById('statusFilter').onchange = renderUsers;
+    document.getElementById('refreshUsersBtn').onclick = loadUsers;
+
+    document.addEventListener('DOMContentLoaded', loadUsers);
+  </script>
+</body>
+</html>

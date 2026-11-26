@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard · BLOODCARE</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-portal="admin" data-page-title="Administrator Console">
+  <div id="pageContent">
+    <div id="dashboardLoader" class="state-box">
+      <div class="spinner"></div>
+      Loading real-time administrative statistics from MySQL database...
+    </div>
+
+    <div id="dashboardContent" style="display:none;">
+      <!-- Low Stock Alert Banner -->
+      <div id="lowStockAlert" class="alert-banner alert-danger" style="display:none;">
+        <span class="alert-icon">⚠️</span>
+        <div class="alert-content" id="lowStockAlertText">
+          <b>Critical Stock Notice:</b> Low inventory detected.
+        </div>
+      </div>
+
+      <!-- Real DB Key Statistics Cards -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-info">
+            <span class="stat-label">Total Donors</span>
+            <span class="stat-value" id="statDonors">0</span>
+            <span class="stat-subtext">Registered voluntary donors</span>
+          </div>
+          <div class="stat-icon-wrap">❤️</div>
+        </div>
+
+        <div class="stat-card stat-blue">
+          <div class="stat-info">
+            <span class="stat-label">Hospitals</span>
+            <span class="stat-value" id="statHospitals">0</span>
+            <span class="stat-subtext">Blood bank network centers</span>
+          </div>
+          <div class="stat-icon-wrap">🏥</div>
+        </div>
+
+        <div class="stat-card stat-purple">
+          <div class="stat-info">
+            <span class="stat-label">Total Recipients</span>
+            <span class="stat-value" id="statRecipients">0</span>
+            <span class="stat-subtext">Patients in system</span>
+          </div>
+          <div class="stat-icon-wrap">👥</div>
+        </div>
+
+        <div class="stat-card stat-green">
+          <div class="stat-info">
+            <span class="stat-label">Valid Blood Units</span>
+            <span class="stat-value" id="statBloodUnits">0</span>
+            <span class="stat-subtext">Non-expired units in stock</span>
+          </div>
+          <div class="stat-icon-wrap">🩸</div>
+        </div>
+      </div>
+
+      <!-- Request Status Metrics Row -->
+      <h3 style="margin-bottom: 12px; font-size: 16px;">Blood Request Pipeline</h3>
+      <div class="grid-4" style="margin-bottom: 24px;">
+        <div class="card" style="padding:16px; margin:0; border-left: 4px solid #3b82f6;">
+          <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase;">Total Requisitions</div>
+          <div style="font-size:24px; font-weight:800;" id="statTotalReqs">0</div>
+        </div>
+        <div class="card" style="padding:16px; margin:0; border-left: 4px solid var(--warning);">
+          <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase;">Pending Review</div>
+          <div style="font-size:24px; font-weight:800; color:var(--warning);" id="statPendingReqs">0</div>
+        </div>
+        <div class="card" style="padding:16px; margin:0; border-left: 4px solid var(--info);">
+          <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase;">Approved</div>
+          <div style="font-size:24px; font-weight:800; color:var(--info);" id="statApprovedReqs">0</div>
+        </div>
+        <div class="card" style="padding:16px; margin:0; border-left: 4px solid var(--success);">
+          <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase;">Fulfilled & Issued</div>
+          <div style="font-size:24px; font-weight:800; color:var(--success);" id="statFulfilledReqs">0</div>
+        </div>
+      </div>
+
+      <!-- Visual Data Breakdown Grids -->
+      <div class="grid-2">
+        <!-- Blood Group Inventory Chart -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Inventory Stock by Blood Group</h3>
+            <a href="inventory.html" class="btn btn-outline btn-sm">Manage Inventory &rarr;</a>
+          </div>
+          <div id="inventoryBarChart" class="chart-bar-list"></div>
+        </div>
+
+        <!-- Donors by Blood Group Chart -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Registered Donors by Blood Group</h3>
+            <a href="donors.html" class="btn btn-outline btn-sm">All Donors &rarr;</a>
+          </div>
+          <div id="donorsBarChart" class="chart-bar-list"></div>
+        </div>
+      </div>
+
+      <!-- Hospital Stock Distribution & Monthly Donations -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Hospital Blood Bank Stock</h3>
+            <a href="hospitals.html" class="btn btn-outline btn-sm">Hospitals &rarr;</a>
+          </div>
+          <div id="hospitalStockTable"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Recent Monthly Donations</h3>
+            <span class="badge badge-info" id="monthlyBadge">Active Trend</span>
+          </div>
+          <div id="monthlyDonationsBox"></div>
+        </div>
+      </div>
+
+      <!-- Recent Tables -->
+      <div class="grid-2">
+        <!-- Recent Donors -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Recent Donor Registrations</h3>
+            <a href="donors.html" class="btn btn-outline btn-sm">View All &rarr;</a>
+          </div>
+          <div id="recentDonorsBox"></div>
+        </div>
+
+        <!-- Recent Blood Requests -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Recent Blood Requests</h3>
+            <a href="requests.html" class="btn btn-outline btn-sm">Manage Requests &rarr;</a>
+          </div>
+          <div id="recentRequestsBox"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    async function loadAdminDashboard() {
+      try {
+        const res = await api.get('/dashboard');
+        const d = res.data;
+
+        // Key stats
+        document.getElementById('statDonors').textContent = d.total_donors || 0;
+        document.getElementById('statHospitals').textContent = d.total_hospitals || 0;
+        document.getElementById('statRecipients').textContent = d.total_recipients || 0;
+        document.getElementById('statBloodUnits').textContent = d.total_blood_units || 0;
+
+        document.getElementById('statTotalReqs').textContent = d.total_blood_requests || 0;
+        document.getElementById('statPendingReqs').textContent = d.pending_requests || 0;
+        document.getElementById('statApprovedReqs').textContent = d.approved_requests || 0;
+        document.getElementById('statFulfilledReqs').textContent = d.fulfilled_requests || 0;
+
+        // Low stock alerts
+        const low = d.low_stock_blood_groups || [];
+        const alertBox = document.getElementById('lowStockAlert');
+        const alertText = document.getElementById('lowStockAlertText');
+        if (low.length > 0) {
+          alertBox.style.display = 'flex';
+          alertText.innerHTML = `
+            <b>Low Blood Stock Warning:</b> The following groups have fewer than ${d.low_stock_threshold || 10} units:
+            <b>${low.map(x => `${esc(x.blood_group)} (${x.units_available} units)`).join(', ')}</b>.
+            Please organize donation drives or replenish hospital stock.
+          `;
+        } else {
+          alertBox.style.display = 'none';
+        }
+
+        // Inventory bar chart
+        const invList = d.blood_inventory || [];
+        const maxUnits = Math.max(1, ...invList.map(x => x.units_available || 0));
+        document.getElementById('inventoryBarChart').innerHTML = invList.map(i => {
+          const pct = Math.min(100, Math.round(((i.units_available || 0) / maxUnits) * 100));
+          const isLow = (i.units_available || 0) < (d.low_stock_threshold || 10);
+          return `
+            <div class="chart-bar-item">
+              <div class="chart-bar-header">
+                <span>Blood Group <b>${esc(i.blood_group)}</b> ${isLow ? '<span class="badge badge-danger" style="font-size:10px;">Low</span>' : ''}</span>
+                <span><b>${i.units_available}</b> valid units ${i.expired_units > 0 ? `(${i.expired_units} expired)` : ''}</span>
+              </div>
+              <div class="chart-bar-track">
+                <div class="chart-bar-fill ${isLow ? '' : 'fill-green'}" style="width: ${pct}%"></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Donors by group bar chart
+        const donorGroups = d.donors_by_group || [];
+        const maxDonors = Math.max(1, ...donorGroups.map(x => x.count || 0));
+        document.getElementById('donorsBarChart').innerHTML = donorGroups.map(g => {
+          const pct = Math.min(100, Math.round(((g.count || 0) / maxDonors) * 100));
+          return `
+            <div class="chart-bar-item">
+              <div class="chart-bar-header">
+                <span>Blood Group <b>${esc(g.blood_group)}</b></span>
+                <span><b>${g.count}</b> donor(s)</span>
+              </div>
+              <div class="chart-bar-track">
+                <div class="chart-bar-fill fill-blue" style="width: ${pct}%"></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Hospital stock table
+        const hospStock = d.hospital_stock || [];
+        const hospBox = document.getElementById('hospitalStockTable');
+        if (!hospStock.length) {
+          hospBox.innerHTML = '<div class="state-box">No hospitals configured.</div>';
+        } else {
+          hospBox.innerHTML = `
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Hospital</th>
+                    <th>Valid Blood Stock</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${hospStock.map(h => `
+                    <tr>
+                      <td><b>${esc(h.hospital_name)}</b></td>
+                      <td><b>${h.valid_units}</b> units</td>
+                      <td>${h.valid_units > 10 ? badge('Adequate', 'success') : badge('Replenish Needed', 'warning')}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+
+        // Monthly donations box
+        const monthly = d.monthly_donations || [];
+        const monthlyBox = document.getElementById('monthlyDonationsBox');
+        if (!monthly.length) {
+          monthlyBox.innerHTML = '<div class="state-box">No historical donation logs yet.</div>';
+        } else {
+          monthlyBox.innerHTML = `
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Donation Records</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${monthly.map(m => `
+                    <tr>
+                      <td>📅 <b>${esc(m.month)}</b></td>
+                      <td><span class="badge badge-info">${m.count} donation(s)</span></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+
+        // Recent Donors Table
+        const recentDonors = d.recent_donors || [];
+        const rDonorsBox = document.getElementById('recentDonorsBox');
+        if (!recentDonors.length) {
+          rDonorsBox.innerHTML = '<div class="state-box">No donors registered yet.</div>';
+        } else {
+          rDonorsBox.innerHTML = `
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Group</th>
+                    <th>Location</th>
+                    <th>Last Donation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${recentDonors.map(dn => `
+                    <tr>
+                      <td><b>${esc(dn.name)}</b></td>
+                      <td>${badge(dn.blood_group, 'red')}</td>
+                      <td>${esc(dn.location || '—')}</td>
+                      <td>${fmtDate(dn.last_donation_date)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+
+        // Recent Blood Requests Table
+        const recentReqs = d.recent_requests || [];
+        const rReqsBox = document.getElementById('recentRequestsBox');
+        if (!recentReqs.length) {
+          rReqsBox.innerHTML = '<div class="state-box">No requests submitted yet.</div>';
+        } else {
+          rReqsBox.innerHTML = `
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Patient</th>
+                    <th>Group</th>
+                    <th>Units</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${recentReqs.map(rq => `
+                    <tr>
+                      <td>#${rq.request_id}</td>
+                      <td><b>${esc(rq.recipient_name || 'Patient')}</b></td>
+                      <td>${badge(rq.blood_group, 'red')}</td>
+                      <td>${rq.units_required}</td>
+                      <td>${badge(rq.status)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+
+        document.getElementById('dashboardLoader').style.display = 'none';
+        document.getElementById('dashboardContent').style.display = 'block';
+      } catch (err) {
+        document.getElementById('dashboardLoader').innerHTML = `<div style="color:var(--danger)">${esc(err.message)}</div>`;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadAdminDashboard);
+  </script>
+</body>
+</html>

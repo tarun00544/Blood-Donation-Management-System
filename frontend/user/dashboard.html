@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Dashboard · BLOODCARE</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-portal="user" data-page-title="User Dashboard">
+  <div id="pageContent">
+    <div id="dashboardLoader" class="state-box">
+      <div class="spinner"></div>
+      Loading user dashboard...
+    </div>
+
+    <div id="dashboardContent" style="display:none;">
+      <!-- Welcome Hero Card -->
+      <div class="profile-hero">
+        <div class="profile-hero-content">
+          <div class="profile-avatar-lg" id="userAvatar">U</div>
+          <div>
+            <h2 class="profile-title" id="welcomeHeading">Welcome, User!</h2>
+            <div class="profile-meta">
+              <span>📧 <span id="userEmail">user@example.com</span></span>
+              <span>📞 <span id="userPhone">—</span></span>
+              <span>🛡️ <span id="userRole">Voluntary User</span></span>
+            </div>
+          </div>
+        </div>
+        <div id="donorStatusAction" style="margin-top: 10px;">
+          <!-- Injected dynamically: Become a Donor or Manage Availability -->
+        </div>
+      </div>
+
+      <!-- Quick Action Shortcuts -->
+      <div class="grid-4" style="margin-bottom: 24px;">
+        <a href="become-donor.html" class="quick-action-card">
+          <div class="quick-action-icon">❤️</div>
+          <div>
+            <div style="font-weight:700; font-size:14px;">Donor Status</div>
+            <div style="font-size:12px; color:var(--text-muted);" id="donorCardSubtext">Register / Update</div>
+          </div>
+        </a>
+        <a href="request-blood.html" class="quick-action-card">
+          <div class="quick-action-icon">➕</div>
+          <div>
+            <div style="font-weight:700; font-size:14px;">Request Blood</div>
+            <div style="font-size:12px; color:var(--text-muted);">Apply for patient units</div>
+          </div>
+        </a>
+        <a href="find-donors.html" class="quick-action-card">
+          <div class="quick-action-icon">🔍</div>
+          <div>
+            <div style="font-weight:700; font-size:14px;">Find Donors</div>
+            <div style="font-size:12px; color:var(--text-muted);">Search verified donors</div>
+          </div>
+        </a>
+        <a href="blood-availability.html" class="quick-action-card">
+          <div class="quick-action-icon">🩸</div>
+          <div>
+            <div style="font-weight:700; font-size:14px;">Blood Stock</div>
+            <div style="font-size:12px; color:var(--text-muted);">Hospital bank overview</div>
+          </div>
+        </a>
+      </div>
+
+      <!-- Personal Request Statistics Cards -->
+      <h3 style="margin-bottom: 14px; font-size: 16px;">My Blood Requests Overview</h3>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-info">
+            <span class="stat-label">Total Requests</span>
+            <span class="stat-value" id="statTotalReqs">0</span>
+            <span class="stat-subtext">Lifetime requests submitted</span>
+          </div>
+          <div class="stat-icon-wrap">📋</div>
+        </div>
+
+        <div class="stat-card stat-yellow">
+          <div class="stat-info">
+            <span class="stat-label">Pending Review</span>
+            <span class="stat-value" id="statPendingReqs">0</span>
+            <span class="stat-subtext">Awaiting hospital approval</span>
+          </div>
+          <div class="stat-icon-wrap">⏳</div>
+        </div>
+
+        <div class="stat-card stat-blue">
+          <div class="stat-info">
+            <span class="stat-label">Approved</span>
+            <span class="stat-value" id="statApprovedReqs">0</span>
+            <span class="stat-subtext">Approved & queued for issue</span>
+          </div>
+          <div class="stat-icon-wrap">👍</div>
+        </div>
+
+        <div class="stat-card stat-green">
+          <div class="stat-info">
+            <span class="stat-label">Fulfilled</span>
+            <span class="stat-value" id="statFulfilledReqs">0</span>
+            <span class="stat-subtext">Blood units issued</span>
+          </div>
+          <div class="stat-icon-wrap">✓</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- Recent Personal Blood Requests -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Recent Blood Requests</h3>
+            <a href="my-requests.html" class="btn btn-outline btn-sm">View All &rarr;</a>
+          </div>
+          <div id="recentRequestsList">
+            <div class="state-box">Loading recent requests...</div>
+          </div>
+        </div>
+
+        <!-- Blood Availability Overview -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Community Blood Stock Availability</h3>
+            <a href="blood-availability.html" class="btn btn-outline btn-sm">Hospitals List &rarr;</a>
+          </div>
+          <div id="bloodAvailabilityList" class="chart-bar-list">
+            <!-- Dynamic bars -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    async function loadDashboard() {
+      try {
+        const res = await api.get('/user/dashboard');
+        const data = res.data;
+        const user = data.user;
+        const stats = data.stats || {};
+        const donor = data.donor_profile;
+
+        // Populate User Info
+        document.getElementById('userAvatar').textContent = (user.name || 'U').charAt(0).toUpperCase();
+        document.getElementById('welcomeHeading').textContent = `Welcome back, ${user.name}!`;
+        document.getElementById('userEmail').textContent = user.email || '—';
+        document.getElementById('userPhone').textContent = user.phone || 'No phone added';
+
+        // Donor Status Box
+        const donorActionDiv = document.getElementById('donorStatusAction');
+        const donorSubtext = document.getElementById('donorCardSubtext');
+        if (donor) {
+          donorSubtext.textContent = `Registered (${donor.blood_group}) - ${donor.is_available ? 'Available' : 'Unavailable'}`;
+          donorActionDiv.innerHTML = `
+            <div style="background:rgba(255,255,255,0.15); padding:10px 16px; border-radius:var(--radius-md); text-align:right;">
+              <div style="font-size:12px; color:#e2e8f0;">Donor Blood Group: <b style="color:#fca5a5; font-size:14px;">${esc(donor.blood_group)}</b></div>
+              <div style="margin-top:6px;">
+                ${donor.is_available ? badge('Active Donor (Available)', 'success') : badge('Temporarily Unavailable', 'secondary')}
+                <a href="become-donor.html" class="btn btn-sm btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.4); margin-left:8px;">Manage</a>
+              </div>
+            </div>
+          `;
+        } else {
+          donorSubtext.textContent = 'Not registered yet';
+          donorActionDiv.innerHTML = `
+            <a href="become-donor.html" class="btn btn-primary" style="background:#ef4444; border:none; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+              ❤️ Register as Blood Donor
+            </a>
+          `;
+        }
+
+        // Stats
+        document.getElementById('statTotalReqs').textContent = stats.total_requests || 0;
+        document.getElementById('statPendingReqs').textContent = stats.pending_requests || 0;
+        document.getElementById('statApprovedReqs').textContent = stats.approved_requests || 0;
+        document.getElementById('statFulfilledReqs').textContent = stats.fulfilled_requests || 0;
+
+        // Recent Requests Table
+        const recentBox = document.getElementById('recentRequestsList');
+        const recent = data.recent_requests || [];
+        if (!recent.length) {
+          recentBox.innerHTML = `
+            <div class="state-box">
+              <p>You have not submitted any blood requests yet.</p>
+              <a href="request-blood.html" class="btn btn-primary btn-sm">+ Request Blood Now</a>
+            </div>
+          `;
+        } else {
+          recentBox.innerHTML = `
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Req #</th>
+                    <th>Group</th>
+                    <th>Units</th>
+                    <th>Hospital</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${recent.map(r => `
+                    <tr>
+                      <td>#${r.request_id}</td>
+                      <td>${badge(r.blood_group, 'red')}</td>
+                      <td><b>${r.units_required}</b> unit(s)</td>
+                      <td>${esc(r.hospital_name || 'Hospital')}</td>
+                      <td>${badge(r.status)}</td>
+                      <td>${fmtDate(r.request_date)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+
+        // Blood Availability Bars
+        const barsBox = document.getElementById('bloodAvailabilityList');
+        const availability = data.blood_availability || [];
+        const maxUnits = Math.max(1, ...availability.map(a => a.units_available || 0));
+
+        barsBox.innerHTML = availability.map(item => {
+          const pct = Math.min(100, Math.round(((item.units_available || 0) / maxUnits) * 100));
+          return `
+            <div class="chart-bar-item">
+              <div class="chart-bar-header">
+                <span>Blood Group <b>${esc(item.blood_group)}</b></span>
+                <span><b>${item.units_available}</b> units available</span>
+              </div>
+              <div class="chart-bar-track">
+                <div class="chart-bar-fill ${item.units_available < 10 ? '' : 'fill-green'}" style="width: ${pct}%"></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        document.getElementById('dashboardLoader').style.display = 'none';
+        document.getElementById('dashboardContent').style.display = 'block';
+      } catch (err) {
+        document.getElementById('dashboardLoader').innerHTML = `<div style="color:var(--danger)">${esc(err.message)}</div>`;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadDashboard);
+  </script>
+</body>
+</html>

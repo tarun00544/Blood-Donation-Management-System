@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recipient Management · BLOODCARE Admin</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-portal="admin" data-page-title="Recipient Management">
+  <div id="pageContent">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">👥 Patient & Recipient Registry</h3>
+          <p style="margin:4px 0 0; font-size:13px; color:var(--text-muted);">
+            Manage blood recipients, admitted patients, and assigned hospital care centers.
+          </p>
+        </div>
+        <button id="addRecipientBtn" class="btn btn-primary btn-sm">+ Add New Recipient</button>
+      </div>
+
+      <!-- Filters -->
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
+        <div style="flex:2; min-width:200px;">
+          <input type="text" id="searchInput" class="form-control" placeholder="Search recipients by patient name...">
+        </div>
+        <div style="flex:1; min-width:140px;">
+          <select id="groupFilter" class="form-control">
+            <option value="">All Blood Groups</option>
+            <option value="A+">A+</option>
+            <option value="A-">A-</option>
+            <option value="B+">B+</option>
+            <option value="B-">B-</option>
+            <option value="AB+">AB+</option>
+            <option value="AB-">AB-</option>
+            <option value="O+">O+</option>
+            <option value="O-">O-</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:180px;">
+          <select id="hospFilter" class="form-control">
+            <option value="">All Hospitals</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="recipientsTableBox">
+        <div class="state-box"><div class="spinner"></div>Loading recipient records...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    let recipientsList = [];
+    let hospitalsList = [];
+
+    async function loadRecipients() {
+      const box = document.getElementById('recipientsTableBox');
+      box.innerHTML = '<div class="state-box"><div class="spinner"></div>Loading recipients...</div>';
+
+      try {
+        const [recRes, hospRes] = await Promise.all([
+          api.get('/recipients'),
+          api.get('/hospitals')
+        ]);
+        recipientsList = recRes.data || [];
+        hospitalsList = hospRes.data || [];
+
+        // Update hospital filter
+        const hSelect = document.getElementById('hospFilter');
+        hSelect.innerHTML = '<option value="">All Hospitals</option>' +
+          hospitalsList.map(h => `<option value="${h.hospital_id}">${esc(h.name)}</option>`).join('');
+
+        renderRecipients();
+      } catch (err) {
+        box.innerHTML = `<div class="state-box" style="color:var(--danger)">${esc(err.message)}</div>`;
+      }
+    }
+
+    function renderRecipients() {
+      const box = document.getElementById('recipientsTableBox');
+      const search = document.getElementById('searchInput').value.trim().toLowerCase();
+      const group = document.getElementById('groupFilter').value;
+      const hosp = document.getElementById('hospFilter').value;
+
+      const filtered = recipientsList.filter(r => {
+        if (search && !String(r.name || '').toLowerCase().includes(search)) return false;
+        if (group && r.blood_group !== group) return false;
+        if (hosp && String(r.hospital_id) !== hosp) return false;
+        return true;
+      });
+
+      if (!filtered.length) {
+        box.innerHTML = '<div class="state-box">No recipients found matching the filter criteria.</div>';
+        return;
+      }
+
+      box.innerHTML = `
+        <div style="font-size:13px; color:var(--text-muted); margin-bottom:10px;">
+          Showing <b>${filtered.length}</b> recipient(s):
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Patient / Recipient Name</th>
+                <th>Blood Group</th>
+                <th>Admitted Hospital</th>
+                <th>Required Units</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.map(r => `
+                <tr>
+                  <td>#${r.recipient_id}</td>
+                  <td><b>${esc(r.name)}</b></td>
+                  <td>${badge(r.blood_group, 'red')}</td>
+                  <td>${esc(r.hospital_name || '—')}</td>
+                  <td>${r.required_units ? `<b>${r.required_units}</b> unit(s)` : '—'}</td>
+                  <td>
+                    <button class="btn btn-outline btn-sm" onclick="editRecipient(${r.recipient_id})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteRecipient(${r.recipient_id}, '${esc(r.name)}')">Delete</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function openRecipientModal(rec = null) {
+      const isEdit = rec !== null;
+      const html = `
+        <form id="modalRecForm" novalidate>
+          <div class="form-group">
+            <label class="form-label">Recipient / Patient Name <span class="required">*</span></label>
+            <input type="text" id="rName" class="form-control" value="${esc(rec ? rec.name : '')}" required>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Blood Group <span class="required">*</span></label>
+              <select id="rGroup" class="form-control" required>
+                <option value="">Select...</option>
+                ${['A+','A-','B+','B-','AB+','AB-','O+','O-'].map(g => `
+                  <option value="${g}" ${rec && rec.blood_group === g ? 'selected' : ''}>${g}</option>
+                `).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Required Units</label>
+              <input type="number" id="rUnits" class="form-control" min="1" max="20" value="${rec && rec.required_units ? rec.required_units : '1'}">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Assigned Hospital</label>
+            <select id="rHospital" class="form-control">
+              <option value="">None / Unassigned</option>
+              ${hospitalsList.map(h => `
+                <option value="${h.hospital_id}" ${rec && rec.hospital_id === h.hospital_id ? 'selected' : ''}>
+                  ${esc(h.name)} (${esc(h.location || '')})
+                </option>
+              `).join('')}
+            </select>
+          </div>
+          <div class="modal-footer" style="margin:-24px -24px -24px -24px; margin-top:20px;">
+            <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+            <button type="submit" id="saveRBtn" class="btn btn-primary">${isEdit ? 'Update Recipient' : 'Save Recipient'}</button>
+          </div>
+        </form>
+      `;
+
+      const modal = openModal(isEdit ? `Edit Recipient #${rec.recipient_id}` : 'Add New Recipient', html);
+      const form = modal.querySelector('#modalRecForm');
+
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const name = modal.querySelector('#rName').value.trim();
+        const blood_group = modal.querySelector('#rGroup').value;
+        const required_units = modal.querySelector('#rUnits').value ? parseInt(modal.querySelector('#rUnits').value, 10) : null;
+        const hospital_id = modal.querySelector('#rHospital').value ? parseInt(modal.querySelector('#rHospital').value, 10) : null;
+
+        if (!name || !blood_group) {
+          toast('Recipient name and blood group are required', 'error');
+          return;
+        }
+
+        const btn = modal.querySelector('#saveRBtn');
+        btn.disabled = true;
+
+        try {
+          const payload = { name, blood_group, required_units, hospital_id };
+          if (isEdit) {
+            await api.put(`/recipients/${rec.recipient_id}`, payload);
+            toast('Recipient updated successfully', 'success');
+          } else {
+            await api.post('/recipients', payload);
+            toast('Recipient added successfully', 'success');
+          }
+          modal.remove();
+          loadRecipients();
+        } catch (err) {
+          toast(err.message, 'error');
+          btn.disabled = false;
+        }
+      };
+    }
+
+    window.editRecipient = (id) => {
+      const r = recipientsList.find(x => x.recipient_id === id);
+      if (r) openRecipientModal(r);
+    };
+
+    window.deleteRecipient = (id, name) => {
+      const modal = openModal(`Delete Recipient #${id}`, `
+        <p>Are you sure you want to delete recipient <b>${esc(name)}</b>?</p>
+        <p style="font-size:13px; color:var(--text-muted);">All associated blood requests will be deleted automatically per database foreign key constraints.</p>
+        <div class="modal-footer" style="margin:-24px -24px -24px -24px; margin-top:20px;">
+          <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+          <button type="button" id="confirmRDelBtn" class="btn btn-danger">Confirm Delete</button>
+        </div>
+      `);
+      modal.querySelector('#confirmRDelBtn').onclick = async () => {
+        try {
+          await api.del(`/recipients/${id}`);
+          toast('Recipient deleted successfully', 'success');
+          modal.remove();
+          loadRecipients();
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      };
+    };
+
+    document.getElementById('addRecipientBtn').onclick = () => openRecipientModal();
+    document.getElementById('groupFilter').onchange = renderRecipients;
+    document.getElementById('hospFilter').onchange = renderRecipients;
+    document.getElementById('searchInput').oninput = renderRecipients;
+
+    document.addEventListener('DOMContentLoaded', loadRecipients);
+  </script>
+</body>
+</html>

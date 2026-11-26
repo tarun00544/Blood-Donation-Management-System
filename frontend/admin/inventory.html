@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blood Inventory · BLOODCARE Admin</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-portal="admin" data-page-title="Blood Inventory Management">
+  <div id="pageContent">
+    <!-- Alert Banner -->
+    <div id="inventoryAlertBanner" class="alert-banner alert-warning" style="display:none;">
+      <span class="alert-icon">⚠️</span>
+      <div class="alert-content" id="inventoryAlertContent">
+        Inventory status alert.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">🩸 Hospital Blood Bank Inventory Batches</h3>
+          <p style="margin:4px 0 0; font-size:13px; color:var(--text-muted);">
+            Manage batch stock levels, monitor expiration dates, and register newly collected blood units.
+          </p>
+        </div>
+        <button id="addStockBtn" class="btn btn-primary btn-sm">+ Add Stock Batch</button>
+      </div>
+
+      <!-- Filters -->
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
+        <div style="flex:1; min-width:140px;">
+          <select id="groupFilter" class="form-control">
+            <option value="">All Blood Groups</option>
+            <option value="A+">A+</option>
+            <option value="A-">A-</option>
+            <option value="B+">B+</option>
+            <option value="B-">B-</option>
+            <option value="AB+">AB+</option>
+            <option value="AB-">AB-</option>
+            <option value="O+">O+</option>
+            <option value="O-">O-</option>
+          </select>
+        </div>
+
+        <div style="flex:2; min-width:200px;">
+          <select id="hospFilter" class="form-control">
+            <option value="">All Participating Hospitals</option>
+          </select>
+        </div>
+
+        <div style="flex:1; min-width:160px;">
+          <select id="expiryFilter" class="form-control">
+            <option value="">All Expiry States</option>
+            <option value="valid">Valid (Non-expired)</option>
+            <option value="expiring_soon">Expiring Soon (&lt;7 days)</option>
+            <option value="expired">Expired Batches</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="inventoryTableBox">
+        <div class="state-box"><div class="spinner"></div>Loading stock inventory...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    let stockList = [];
+    let hospitalsList = [];
+
+    async function loadInventory() {
+      const box = document.getElementById('inventoryTableBox');
+      box.innerHTML = '<div class="state-box"><div class="spinner"></div>Loading inventory...</div>';
+
+      try {
+        const group = document.getElementById('groupFilter').value;
+        const hosp = document.getElementById('hospFilter').value;
+        const expiry = document.getElementById('expiryFilter').value;
+
+        let q = '/blood-stock?';
+        const params = [];
+        if (group) params.push(`blood_group=${encodeURIComponent(group)}`);
+        if (hosp) params.push(`hospital_id=${encodeURIComponent(hosp)}`);
+        if (expiry) params.push(`expiry=${encodeURIComponent(expiry)}`);
+        q += params.join('&');
+
+        const [stockRes, hospRes] = await Promise.all([
+          api.get(q),
+          hospitalsList.length ? Promise.resolve({ data: hospitalsList }) : api.get('/hospitals')
+        ]);
+
+        stockList = stockRes.data || [];
+        hospitalsList = hospRes.data || [];
+
+        // Update hospital filter once
+        const hSelect = document.getElementById('hospFilter');
+        if (hSelect.options.length <= 1) {
+          hSelect.innerHTML = '<option value="">All Participating Hospitals</option>' +
+            hospitalsList.map(h => `<option value="${h.hospital_id}">${esc(h.name)}</option>`).join('');
+        }
+
+        checkAlerts();
+        renderInventory();
+      } catch (err) {
+        box.innerHTML = `<div class="state-box" style="color:var(--danger)">${esc(err.message)}</div>`;
+      }
+    }
+
+    function checkAlerts() {
+      const banner = document.getElementById('inventoryAlertBanner');
+      const content = document.getElementById('inventoryAlertContent');
+      const expiredCount = stockList.filter(s => s.expiry_status === 'Expired').length;
+      const soonCount = stockList.filter(s => s.expiry_status === 'Expiring Soon').length;
+
+      if (expiredCount > 0 || soonCount > 0) {
+        banner.style.display = 'flex';
+        banner.className = expiredCount > 0 ? 'alert-banner alert-danger' : 'alert-banner alert-warning';
+        content.innerHTML = `
+          <b>Inventory Attention Required:</b>
+          ${expiredCount > 0 ? `<span><b>${expiredCount}</b> batch(es) have EXPIRED.</span> ` : ''}
+          ${soonCount > 0 ? `<span><b>${soonCount}</b> batch(es) are expiring within 7 days.</span>` : ''}
+        `;
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+
+    function renderInventory() {
+      const box = document.getElementById('inventoryTableBox');
+      if (!stockList.length) {
+        box.innerHTML = '<div class="state-box">No blood stock batches found matching the filters.</div>';
+        return;
+      }
+
+      box.innerHTML = `
+        <div style="font-size:13px; color:var(--text-muted); margin-bottom:10px;">
+          Showing <b>${stockList.length}</b> stock batch(es):
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Batch #</th>
+                <th>Blood Group</th>
+                <th>Units Available</th>
+                <th>Hospital Blood Bank</th>
+                <th>Expiry Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${stockList.map(s => `
+                <tr class="${s.expiry_status === 'Expired' ? 'row-expired' : ''}">
+                  <td>#${s.stock_id}</td>
+                  <td>${badge(s.blood_group, 'red')}</td>
+                  <td><b style="font-size:15px;">${s.units_available}</b> unit(s)</td>
+                  <td><b>${esc(s.hospital_name || 'Hospital #' + s.hospital_id)}</b></td>
+                  <td>${fmtDate(s.expiry_date)}</td>
+                  <td>${badge(s.expiry_status)}</td>
+                  <td>
+                    <button class="btn btn-outline btn-sm" onclick="editStock(${s.stock_id})">Update Units</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteStock(${s.stock_id})">Delete</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function openStockModal(stock = null) {
+      const isEdit = stock !== null;
+      const html = `
+        <form id="modalStockForm" novalidate>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Blood Group <span class="required">*</span></label>
+              <select id="sGroup" class="form-control" ${isEdit ? 'disabled' : 'required'}>
+                <option value="">Select Group...</option>
+                ${['A+','A-','B+','B-','AB+','AB-','O+','O-'].map(g => `
+                  <option value="${g}" ${stock && stock.blood_group === g ? 'selected' : ''}>${g}</option>
+                `).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Units Available <span class="required">*</span></label>
+              <input type="number" id="sUnits" class="form-control" min="0" value="${stock ? stock.units_available : '10'}" required>
+              <div class="form-hint">Total volume units in this batch.</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Hospital Blood Bank <span class="required">*</span></label>
+            <select id="sHosp" class="form-control" ${isEdit ? 'disabled' : 'required'}>
+              <option value="">Select Hospital...</option>
+              ${hospitalsList.map(h => `
+                <option value="${h.hospital_id}" ${stock && stock.hospital_id === h.hospital_id ? 'selected' : ''}>
+                  ${esc(h.name)} (${esc(h.location || '')})
+                </option>
+              `).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Expiry Date</label>
+            <input type="date" id="sExpiry" class="form-control" value="${stock && stock.expiry_date ? String(stock.expiry_date).slice(0,10) : ''}">
+            <div class="form-hint">Standard shelf life is typically 35-42 days from collection.</div>
+          </div>
+          <div class="modal-footer" style="margin:-24px -24px -24px -24px; margin-top:20px;">
+            <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+            <button type="submit" id="saveSBtn" class="btn btn-primary">${isEdit ? 'Update Batch' : 'Save Batch'}</button>
+          </div>
+        </form>
+      `;
+
+      const modal = openModal(isEdit ? `Update Batch #${stock.stock_id}` : 'Add Blood Stock Batch', html);
+      const form = modal.querySelector('#modalStockForm');
+
+      // Pre-set default expiry date to 35 days from now for new batches
+      if (!isEdit) {
+        const exp = new Date();
+        exp.setDate(exp.getDate() + 35);
+        modal.querySelector('#sExpiry').value = exp.toISOString().slice(0, 10);
+      }
+
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const blood_group = isEdit ? stock.blood_group : modal.querySelector('#sGroup').value;
+        const units_available = parseInt(modal.querySelector('#sUnits').value, 10);
+        const hospital_id = isEdit ? stock.hospital_id : parseInt(modal.querySelector('#sHosp').value, 10);
+        const expiry_date = modal.querySelector('#sExpiry').value || null;
+
+        if (isNaN(units_available) || units_available < 0) {
+          toast('Units available cannot be negative', 'error');
+          return;
+        }
+        if (!isEdit && (!blood_group || !hospital_id)) {
+          toast('Blood group and hospital are required', 'error');
+          return;
+        }
+
+        const btn = modal.querySelector('#saveSBtn');
+        btn.disabled = true;
+
+        try {
+          const payload = { blood_group, units_available, hospital_id, expiry_date };
+          if (isEdit) {
+            await api.put(`/blood-stock/${stock.stock_id}`, payload);
+            toast('Stock batch updated successfully', 'success');
+          } else {
+            await api.post('/blood-stock', payload);
+            toast('Stock batch added successfully (or merged if duplicate batch)', 'success');
+          }
+          modal.remove();
+          loadInventory();
+        } catch (err) {
+          toast(err.message, 'error');
+          btn.disabled = false;
+        }
+      };
+    }
+
+    window.editStock = (id) => {
+      const s = stockList.find(x => x.stock_id === id);
+      if (s) openStockModal(s);
+    };
+
+    window.deleteStock = (id) => {
+      const modal = openModal(`Delete Stock Batch #${id}`, `
+        <p>Are you sure you want to remove batch <b>#${id}</b> from inventory? This should only be done for contaminated or discarded units.</p>
+        <div class="modal-footer" style="margin:-24px -24px -24px -24px; margin-top:20px;">
+          <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+          <button type="button" id="confirmSDelBtn" class="btn btn-danger">Confirm Delete</button>
+        </div>
+      `);
+      modal.querySelector('#confirmSDelBtn').onclick = async () => {
+        try {
+          await api.del(`/blood-stock/${id}`);
+          toast('Stock batch deleted', 'success');
+          modal.remove();
+          loadInventory();
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      };
+    };
+
+    document.getElementById('addStockBtn').onclick = () => openStockModal();
+    document.getElementById('groupFilter').onchange = loadInventory;
+    document.getElementById('hospFilter').onchange = loadInventory;
+    document.getElementById('expiryFilter').onchange = loadInventory;
+
+    document.addEventListener('DOMContentLoaded', loadInventory);
+  </script>
+</body>
+</html>

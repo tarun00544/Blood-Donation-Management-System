@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Become a Donor · BLOODCARE</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-portal="user" data-page-title="Donor Registration & Availability">
+  <div id="pageContent">
+    <div style="max-width: 760px; margin: 0 auto;">
+      <!-- Donor Status Banner -->
+      <div id="donorBanner" class="alert-banner alert-info" style="display:none;">
+        <span class="alert-icon">ℹ</span>
+        <div class="alert-content" id="donorBannerText">
+          Checking your donor profile...
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h3 class="card-title">❤️ Voluntary Blood Donor Registration</h3>
+            <p style="margin: 4px 0 0; font-size: 13px; color: var(--text-muted);">
+              Registering makes your contact details visible to patients and hospitals during life-threatening emergencies.
+            </p>
+          </div>
+        </div>
+
+        <form id="donorForm" novalidate>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label" for="donorBloodGroup">Blood Group <span class="required">*</span></label>
+              <select id="donorBloodGroup" class="form-control" required>
+                <option value="">Select Blood Group...</option>
+                <option value="A+">A+</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B-">B-</option>
+                <option value="AB+">AB+</option>
+                <option value="AB-">AB-</option>
+                <option value="O+">O+</option>
+                <option value="O-">O-</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="donorAge">Age (Years) <span class="required">*</span></label>
+              <input type="number" id="donorAge" class="form-control" min="18" max="65" placeholder="e.g. 25" required>
+              <div class="form-hint">Eligible donor age is between 18 and 65 years.</div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label" for="donorLocation">City / Location <span class="required">*</span></label>
+              <input type="text" id="donorLocation" class="form-control" placeholder="e.g. Ludhiana, Model Town" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="donorPhone">Emergency Phone Number <span class="required">*</span></label>
+              <input type="tel" id="donorPhone" class="form-control" placeholder="+91 98765 00000" required>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label" for="lastDonationDate">Last Donation Date (if applicable)</label>
+              <input type="date" id="lastDonationDate" class="form-control">
+              <div class="form-hint">Leave blank if this will be your first blood donation.</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Current Donor Availability</label>
+              <div style="margin-top: 10px;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 500;">
+                  <input type="checkbox" id="donorAvailability" style="width: 18px; height: 18px;" checked>
+                  <span>Yes, I am actively available to donate blood</span>
+                </label>
+                <div class="form-hint" style="margin-left: 28px;">Uncheck if you are temporarily traveling, unwell, or ineligible.</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 12px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border);">
+            <button type="submit" id="saveDonorBtn" class="btn btn-primary" style="padding: 12px 24px;">
+              ❤️ Save Donor Profile
+            </button>
+            <a href="dashboard.html" class="btn btn-secondary" style="padding: 12px 20px;">Cancel</a>
+          </div>
+        </form>
+      </div>
+
+      <!-- Eligibility Guidelines Card -->
+      <div class="card" style="background:#f8fafc; border:1px solid #cbd5e1;">
+        <h4 style="font-size:15px; margin-bottom:8px;">💡 Blood Donation Guidelines</h4>
+        <ul style="font-size:13px; color:var(--text-secondary); margin:0; padding-left:18px; line-height:1.7;">
+          <li>Donors must weigh at least 50 kg and feel healthy on the day of donation.</li>
+          <li>A minimum interval of <b>90 days (3 months)</b> is required between consecutive blood donations.</li>
+          <li>Ensure you stay hydrated and have eaten a light meal before giving blood.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    async function loadDonorProfile() {
+      try {
+        const res = await api.get('/user/donor-profile');
+        const donor = res.data;
+        const banner = document.getElementById('donorBanner');
+        const bannerText = document.getElementById('donorBannerText');
+
+        if (donor) {
+          document.getElementById('donorBloodGroup').value = donor.blood_group || '';
+          document.getElementById('donorAge').value = donor.age || '';
+          document.getElementById('donorLocation').value = donor.location || '';
+          document.getElementById('donorPhone').value = donor.phone || '';
+          if (donor.last_donation_date) {
+            document.getElementById('lastDonationDate').value = String(donor.last_donation_date).slice(0, 10);
+          }
+          document.getElementById('donorAvailability').checked = Boolean(donor.is_available);
+
+          banner.className = 'alert-banner alert-info';
+          banner.style.display = 'flex';
+          bannerText.innerHTML = `
+            <b>Registered Blood Donor:</b> You are actively registered in the BLOODCARE database with blood group <b>${esc(donor.blood_group)}</b>.
+            Status: ${donor.is_available ? '<span class="badge badge-success">Available</span>' : '<span class="badge badge-secondary">Unavailable</span>'}
+          `;
+          document.getElementById('saveDonorBtn').textContent = 'Update Donor Profile';
+        } else {
+          // Prefill phone from user profile
+          const userRes = await api.get('/user/profile');
+          if (userRes.data && userRes.data.phone) {
+            document.getElementById('donorPhone').value = userRes.data.phone;
+          }
+        }
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    document.getElementById('donorForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const blood_group = document.getElementById('donorBloodGroup').value;
+      const age = parseInt(document.getElementById('donorAge').value, 10);
+      const location = document.getElementById('donorLocation').value.trim();
+      const phone = document.getElementById('donorPhone').value.trim();
+      const last_donation_date = document.getElementById('lastDonationDate').value || null;
+      const is_available = document.getElementById('donorAvailability').checked;
+
+      if (!blood_group) {
+        toast('Please select your blood group', 'error');
+        return;
+      }
+      if (!age || age < 18 || age > 65) {
+        toast('Age must be between 18 and 65 years', 'error');
+        return;
+      }
+      if (!location) {
+        toast('Location is required', 'error');
+        return;
+      }
+      if (!phone) {
+        toast('Emergency phone number is required', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('saveDonorBtn');
+      btn.disabled = true;
+      btn.textContent = 'Saving donor details...';
+
+      try {
+        const res = await api.post('/user/become-donor', {
+          blood_group,
+          age,
+          location,
+          phone,
+          last_donation_date,
+          is_available
+        });
+        toast('Donor profile registered/updated successfully!', 'success');
+        setTimeout(() => {
+          window.location.href = 'dashboard.html';
+        }, 600);
+      } catch (err) {
+        toast(err.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Save Donor Profile';
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', loadDonorProfile);
+  </script>
+</body>
+</html>

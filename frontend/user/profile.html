@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Profile · BLOODCARE</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-portal="user" data-page-title="My Profile">
+  <div id="pageContent">
+    <div class="grid-2">
+      <!-- Personal Details Card -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Personal Information</h3>
+        </div>
+        <form id="profileForm" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="profName">Full Name <span class="required">*</span></label>
+            <input type="text" id="profName" class="form-control" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="profEmail">Email Address</label>
+            <input type="email" id="profEmail" class="form-control" disabled style="background-color:#f1f5f9; cursor:not-allowed;">
+            <div class="form-hint">Email address cannot be modified once registered.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="profPhone">Contact Phone Number <span class="required">*</span></label>
+            <input type="tel" id="profPhone" class="form-control" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Account Role</label>
+            <input type="text" id="profRole" class="form-control" disabled style="background-color:#f1f5f9; cursor:not-allowed;">
+          </div>
+
+          <button type="submit" id="saveProfileBtn" class="btn btn-primary">
+            Save Profile Changes
+          </button>
+        </form>
+      </div>
+
+      <!-- Change Password Card -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Security & Password</h3>
+        </div>
+        <form id="passwordForm" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="curPassword">Current Password <span class="required">*</span></label>
+            <div class="pwd-wrapper">
+              <input type="password" id="curPassword" class="form-control" required autocomplete="current-password">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="newPassword">New Password <span class="required">*</span></label>
+            <div class="pwd-wrapper">
+              <input type="password" id="newPassword" class="form-control" placeholder="Min. 6 characters" required autocomplete="new-password">
+            </div>
+            <div class="form-hint">Ensure your password is at least 6 characters.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="confPassword">Confirm New Password <span class="required">*</span></label>
+            <div class="pwd-wrapper">
+              <input type="password" id="confPassword" class="form-control" required autocomplete="new-password">
+            </div>
+          </div>
+
+          <button type="submit" id="changePasswordBtn" class="btn btn-secondary">
+            Update Password
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    initPasswordToggle('#curPassword', '.pwd-toggle-btn');
+    initPasswordToggle('#newPassword', '.pwd-toggle-btn');
+    initPasswordToggle('#confPassword', '.pwd-toggle-btn');
+
+    async function loadProfile() {
+      try {
+        const res = await api.get('/user/profile');
+        const user = res.data;
+        document.getElementById('profName').value = user.name || '';
+        document.getElementById('profEmail').value = user.email || '';
+        document.getElementById('profPhone').value = user.phone || '';
+        document.getElementById('profRole').value = (user.role || 'user').toUpperCase();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    // Save profile details
+    document.getElementById('profileForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('profName').value.trim();
+      const phone = document.getElementById('profPhone').value.trim();
+
+      if (!name) {
+        toast('Full name is required', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('saveProfileBtn');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
+      try {
+        const res = await api.put('/user/profile', { name, phone });
+        toast('Profile updated successfully!', 'success');
+        // Update topbar user name if available
+        const nameEl = document.querySelector('.user-name');
+        if (nameEl) nameEl.textContent = name;
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Profile Changes';
+      }
+    };
+
+    // Change password
+    document.getElementById('passwordForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const current_password = document.getElementById('curPassword').value;
+      const new_password = document.getElementById('newPassword').value;
+      const confirm_password = document.getElementById('confPassword').value;
+
+      if (!current_password || !new_password) {
+        toast('Please fill out all password fields', 'error');
+        return;
+      }
+      if (new_password.length < 6) {
+        toast('New password must be at least 6 characters long', 'error');
+        return;
+      }
+      if (new_password !== confirm_password) {
+        toast('New passwords do not match', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('changePasswordBtn');
+      btn.disabled = true;
+      btn.textContent = 'Updating...';
+
+      try {
+        await api.put('/user/change-password', {
+          current_password,
+          new_password,
+          confirm_password
+        });
+        toast('Password updated successfully! Please remember your new password.', 'success');
+        document.getElementById('passwordForm').reset();
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Update Password';
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', loadProfile);
+  </script>
+</body>
+</html>

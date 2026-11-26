@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Donor Management · BLOODCARE Admin</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-portal="admin" data-page-title="Donor Management">
+  <div id="pageContent">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">❤️ Voluntary Donors Registry</h3>
+          <p style="margin:4px 0 0; font-size:13px; color:var(--text-muted);">
+            Manage registered blood donors, track donation eligibility, and register new community donors.
+          </p>
+        </div>
+        <button id="addDonorBtn" class="btn btn-primary btn-sm">+ Add New Donor</button>
+      </div>
+
+      <!-- Filters & Toolbar -->
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
+        <div style="flex:2; min-width:200px;">
+          <input type="text" id="searchInput" class="form-control" placeholder="Search by name, email, phone, location...">
+        </div>
+        <div style="flex:1; min-width:140px;">
+          <select id="groupFilter" class="form-control">
+            <option value="">All Blood Groups</option>
+            <option value="A+">A+</option>
+            <option value="A-">A-</option>
+            <option value="B+">B+</option>
+            <option value="B-">B-</option>
+            <option value="AB+">AB+</option>
+            <option value="AB-">AB-</option>
+            <option value="O+">O+</option>
+            <option value="O-">O-</option>
+          </select>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; margin:0;">
+            <input type="checkbox" id="eligibleFilter" style="width:auto;"> Eligible Only (&gt;90d)
+          </label>
+        </div>
+      </div>
+
+      <!-- Donors Table -->
+      <div id="donorsTableBox">
+        <div class="state-box"><div class="spinner"></div>Loading donor records...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    let donorsList = [];
+
+    async function loadDonors() {
+      const box = document.getElementById('donorsTableBox');
+      box.innerHTML = '<div class="state-box"><div class="spinner"></div>Loading donors...</div>';
+
+      try {
+        const group = document.getElementById('groupFilter').value;
+        const search = document.getElementById('searchInput').value.trim();
+        const eligible = document.getElementById('eligibleFilter').checked;
+
+        let q = '/donors?';
+        const params = [];
+        if (group) params.push(`blood_group=${encodeURIComponent(group)}`);
+        if (search) params.push(`search=${encodeURIComponent(search)}`);
+        if (eligible) params.push('eligible=true');
+        q += params.join('&');
+
+        const res = await api.get(q);
+        donorsList = res.data || [];
+        renderDonors();
+      } catch (err) {
+        box.innerHTML = `<div class="state-box" style="color:var(--danger)">${esc(err.message)}</div>`;
+      }
+    }
+
+    function renderDonors() {
+      const box = document.getElementById('donorsTableBox');
+      if (!donorsList.length) {
+        box.innerHTML = '<div class="state-box">No donors found matching the filters.</div>';
+        return;
+      }
+
+      box.innerHTML = `
+        <div style="font-size:13px; color:var(--text-muted); margin-bottom:10px;">
+          Found <b>${donorsList.length}</b> donor record(s):
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Blood Group</th>
+                <th>Age</th>
+                <th>Contact Phone</th>
+                <th>Email</th>
+                <th>Location</th>
+                <th>Last Donation</th>
+                <th>Eligibility</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${donorsList.map(d => `
+                <tr>
+                  <td>#${d.donor_id}</td>
+                  <td><b>${esc(d.name)}</b></td>
+                  <td>${badge(d.blood_group, 'red')}</td>
+                  <td>${d.age ? d.age + ' yrs' : '—'}</td>
+                  <td>${esc(d.phone || '—')}</td>
+                  <td>${esc(d.email || '—')}</td>
+                  <td>${esc(d.location || '—')}</td>
+                  <td>${fmtDate(d.last_donation_date)}</td>
+                  <td>${d.eligible ? badge('Eligible', 'success') : badge('Resting', 'warning')}</td>
+                  <td>
+                    <button class="btn btn-outline btn-sm" onclick="editDonor(${d.donor_id})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteDonor(${d.donor_id}, '${esc(d.name)}')">Delete</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function openDonorModal(donor = null) {
+      const isEdit = donor !== null;
+      const html = `
+        <form id="modalDonorForm" novalidate>
+          <div class="form-group">
+            <label class="form-label">Full Name <span class="required">*</span></label>
+            <input type="text" id="mName" class="form-control" value="${esc(donor ? donor.name : '')}" required>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Blood Group <span class="required">*</span></label>
+              <select id="mGroup" class="form-control" required>
+                <option value="">Select...</option>
+                ${['A+','A-','B+','B-','AB+','AB-','O+','O-'].map(g => `
+                  <option value="${g}" ${donor && donor.blood_group === g ? 'selected' : ''}>${g}</option>
+                `).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Age</label>
+              <input type="number" id="mAge" class="form-control" min="18" max="65" value="${donor && donor.age ? donor.age : ''}">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Phone Number <span class="required">*</span></label>
+              <input type="tel" id="mPhone" class="form-control" value="${esc(donor ? donor.phone : '')}" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email Address</label>
+              <input type="email" id="mEmail" class="form-control" value="${esc(donor ? donor.email : '')}">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">City / Location</label>
+              <input type="text" id="mLocation" class="form-control" value="${esc(donor ? donor.location : '')}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Last Donation Date</label>
+              <input type="date" id="mDate" class="form-control" value="${donor && donor.last_donation_date ? String(donor.last_donation_date).slice(0,10) : ''}">
+            </div>
+          </div>
+          <div class="modal-footer" style="margin:-24px -24px -24px -24px; margin-top:20px;">
+            <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+            <button type="submit" id="saveMBtn" class="btn btn-primary">${isEdit ? 'Update Donor' : 'Save Donor'}</button>
+          </div>
+        </form>
+      `;
+
+      const modal = openModal(isEdit ? `Edit Donor #${donor.donor_id}` : 'Add New Donor', html);
+      const form = modal.querySelector('#modalDonorForm');
+
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const name = modal.querySelector('#mName').value.trim();
+        const blood_group = modal.querySelector('#mGroup').value;
+        const age = modal.querySelector('#mAge').value ? parseInt(modal.querySelector('#mAge').value, 10) : null;
+        const phone = modal.querySelector('#mPhone').value.trim();
+        const email = modal.querySelector('#mEmail').value.trim() || null;
+        const location = modal.querySelector('#mLocation').value.trim() || null;
+        const last_donation_date = modal.querySelector('#mDate').value || null;
+
+        if (!name || !blood_group || !phone) {
+          toast('Name, blood group, and phone are required', 'error');
+          return;
+        }
+
+        const btn = modal.querySelector('#saveMBtn');
+        btn.disabled = true;
+
+        try {
+          const payload = { name, blood_group, age, phone, email, location, last_donation_date };
+          if (isEdit) {
+            await api.put(`/donors/${donor.donor_id}`, payload);
+            toast('Donor updated successfully', 'success');
+          } else {
+            await api.post('/donors', payload);
+            toast('Donor created successfully', 'success');
+          }
+          modal.remove();
+          loadDonors();
+        } catch (err) {
+          toast(err.message, 'error');
+          btn.disabled = false;
+        }
+      };
+    }
+
+    window.editDonor = (id) => {
+      const d = donorsList.find(x => x.donor_id === id);
+      if (d) openDonorModal(d);
+    };
+
+    window.deleteDonor = (id, name) => {
+      const modal = openModal(`Delete Donor #${id}`, `
+        <p>Are you sure you want to delete donor <b>${esc(name)}</b>? This action cannot be undone.</p>
+        <div class="modal-footer" style="margin:-24px -24px -24px -24px; margin-top:20px;">
+          <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+          <button type="button" id="confirmDelBtn" class="btn btn-danger">Confirm Delete</button>
+        </div>
+      `);
+      modal.querySelector('#confirmDelBtn').onclick = async () => {
+        try {
+          await api.del(`/donors/${id}`);
+          toast('Donor deleted successfully', 'success');
+          modal.remove();
+          loadDonors();
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      };
+    };
+
+    document.getElementById('addDonorBtn').onclick = () => openDonorModal();
+    document.getElementById('groupFilter').onchange = loadDonors;
+    document.getElementById('eligibleFilter').onchange = loadDonors;
+    document.getElementById('searchInput').oninput = () => {
+      clearTimeout(window._searchTimer);
+      window._searchTimer = setTimeout(loadDonors, 300);
+    };
+
+    document.addEventListener('DOMContentLoaded', loadDonors);
+  </script>
+</body>
+</html>
